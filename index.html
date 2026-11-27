@@ -2361,13 +2361,18 @@
     var paras = (bc.paragraphs && bc.paragraphs.length) ? bc.paragraphs : String(bc.text || '').split('\n');
     for (var i = 0; i < paras.length; i++) {
       var t = String(paras[i] || '').replace(/\s+/g, ' ').trim();
-      if (t.length < 5) continue;
+      if (t.length < 3) continue;
       if (!/[가-힣A-Za-z]/.test(t)) continue;
       if (/^https?:/i.test(t)) continue;
       if (/naver\s*corp/i.test(t)) continue;
       if (seen[t]) continue;
       seen[t] = true;
-      if (t.length > 44) t = t.slice(0, 44).replace(/[\s,·]+$/, '') + '…';
+      if (t.length > 30) {
+        var tc = t.slice(0, 30);
+        var tsp = tc.lastIndexOf(' ');
+        if (tsp > 12) tc = tc.slice(0, tsp);
+        t = tc.replace(/[\s,·]+$/, '');
+      }
       out.push(t);
     }
     return out;
@@ -2408,8 +2413,13 @@
       }
       var t = '';
       var h = String(c.hint || '').replace(/\s+/g, ' ').trim();
-      if (h.length >= 5 && /[가-힣A-Za-z]/.test(h)) {
-        if (h.length > 44) h = h.slice(0, 44).replace(/[\s,·]+$/, '') + '…';
+      if (h.length >= 3 && /[가-힣A-Za-z]/.test(h)) {
+        if (h.length > 30) {
+          var hc = h.slice(0, 30);
+          var hsp = hc.lastIndexOf(' ');
+          if (hsp > 12) hc = hc.slice(0, hsp);
+          h = hc.replace(/[\s,·]+$/, '');
+        }
         if (!used[h]) { used[h] = 1; t = h; }
       }
       if (!t) t = pick();
