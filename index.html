@@ -1185,8 +1185,10 @@
   function clearTheme_() {
     if (state.rec) return;
     state.themePreset = '';
+    state.opts.titleScale = 1;
     saveOpts();
     paintTheme();
+    if (state.cuts.length) drawFrame(state.pos);
     toast('테마를 껐습니다. 지금 컷 설정은 그대로 둡니다');
   }
 
