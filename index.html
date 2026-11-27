@@ -751,6 +751,7 @@
     opts: { fit: 'cover', size: 1080, subSize: 1, subPos: 'bottom', vol: 0.8 },
     playing: false, rafId: 0, pos: 0,
     rec: false, recRaf: 0, recStart: 0, recTotal: 0,
+    vtrack: null, recBadMimes: {}, recRetry: 0, recError: '',
     busyAI: false,
     bgm: { file: null, url: '', name: '', playing: false },
     last: null,
@@ -1442,6 +1443,8 @@
     if (el < 0.20) a = el / 0.20;
     if (rem < 0.16 && idx < state.cuts.length - 1) a = Math.min(a, rem / 0.16);
     a = smooth(clamp(a, 0, 1));
+    /* 멈춰 있을 때는 자막을 완전히 보여 줍니다(0초 프레임이 비어 보이지 않게). */
+    if (!state.playing && !state.rec) a = 1;
     var rise = (1 - a) * fs * 0.20;
 
     if (bottomPos) {
@@ -1688,22 +1691,41 @@
     els.recStat.textContent = msg || '';
   }
 
-  function pickMime() {
+  function isSafariLike() {
+    var ua = navigator.userAgent || '';
+    return /Safari/.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS|Android/.test(ua);
+  }
+  function isIOS() {
+    var ua = navigator.userAgent || '';
+    return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  /* 아이폰 Safari 는 MP4 만 만들 수 있어 MP4 를 먼저 봅니다.
+     크롬은 MP4+AAC 조합이 isTypeSupported=true 인데도 실제 녹화에서
+     Internal Error 가 나는 경우가 있어(2026-11-27 확인) WebM 을 먼저 씁니다. */
+  function pickMime(withAudio) {
     var MR = window.MediaRecorder;
-    if (!MR) return '';
-    var list = [
-      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-      'video/mp4;codecs=avc1',
-      'video/mp4',
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm'
-    ];
-    if (typeof MR.isTypeSupported !== 'function') return '';
+    if (!MR || typeof MR.isTypeSupported !== 'function') return '';
+    var safari = isSafariLike() || isIOS();
+    var list = safari
+      ? (withAudio
+          ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+          : ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'])
+      : (withAudio
+          ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=vp9,opus', 'video/mp4']
+          : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=avc1.42E01E', 'video/mp4']);
     for (var i = 0; i < list.length; i++) {
-      try { if (MR.isTypeSupported(list[i])) return list[i]; } catch (e) {}
+      if (state.recBadMimes[list[i]]) continue;
+      var ok = false;
+      try { ok = MR.isTypeSupported(list[i]); } catch (e) { ok = false; }
+      if (ok) return list[i];
     }
     return '';
+  }
+
+  function mimeLabel(m) {
+    if (!m) return '기본 형식';
+    return /mp4/i.test(m) ? 'MP4' : 'WebM';
   }
 
   function startRecord() {
@@ -1720,14 +1742,29 @@
     state.pos = 0;
     drawFrame(0);
 
-    var stream;
-    try { stream = els.stage.captureStream(30); }
-    catch (e) { setRecStat('화면 캡처를 시작하지 못했습니다: ' + (e.message || e), 'bad'); return; }
+    /* captureStream(30) 만 쓰면 일부 크롬에서 프레임이 한 장도 안 잡혀
+       0바이트가 됩니다. 프레임을 우리가 직접 넘기는 captureStream(0)+
+       requestFrame 을 우선 쓰고, 그 API 가 없으면 30fps 자동 캡처로 갑니다. */
+    var stream = null, vtrack = null;
+    try {
+      stream = els.stage.captureStream(0);
+      vtrack = stream.getVideoTracks()[0];
+      if (!vtrack || typeof vtrack.requestFrame !== 'function') {
+        try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        stream = els.stage.captureStream(30);
+        vtrack = null;
+      }
+    } catch (e1) {
+      try { stream = els.stage.captureStream(30); vtrack = null; } catch (e2) {
+        setRecStat('화면 캡처를 시작하지 못했습니다: ' + ((e2 && e2.message) || e2), 'bad');
+        return;
+      }
+    }
 
     var atrack = setupAudioGraph();
     if (atrack) { try { stream.addTrack(atrack); } catch (e) {} }
 
-    var mime = pickMime();
+    var mime = pickMime(!!state.bgm.url);
     var rec = null;
     try {
       var ropts = { videoBitsPerSecond: 8000000 };
@@ -1744,13 +1781,15 @@
     var chunks = [];
     rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
     rec.onerror = function (ev) {
-      setRecStat('녹화 중 오류가 났습니다: ' + ((ev && ev.error && ev.error.message) || '알 수 없음'), 'bad');
+      state.recError = (ev && ev.error && ev.error.message) || '알 수 없음';
+      setRecStat('녹화 중 오류가 났습니다: ' + state.recError, 'bad');
     };
     rec.onstop = function () {
       finishRecord(chunks, rec.mimeType || mime, stream, total);
     };
 
     state.rec = true;
+    state.vtrack = vtrack;
     state.recStart = performance.now();
     state.recTotal = total;
     els.recBtn.disabled = true;
@@ -1758,16 +1797,20 @@
     els.recBar.classList.add('on');
     els.recFill.style.width = '0%';
     els.savedBox.classList.add('hidden');
-    setRecStat((mime && /mp4/i.test(mime) ? 'MP4' : 'WebM') + '로 녹화합니다. 화면을 끄지 마세요.', '');
+    setRecStat((mimeLabel(mime)) + '로 녹화합니다. 화면을 끄지 마세요.', '');
 
     try { rec.start(250); }
-    catch (e) {
+    catch (e2) {
       state.rec = false;
       els.recBtn.disabled = false;
       els.recBtn.textContent = '🎬 영상 파일 저장';
       els.recBar.classList.remove('on');
-      setRecStat('녹화를 시작하지 못했습니다: ' + ((e && e.message) || e), 'bad');
+      setRecStat('녹화를 시작하지 못했습니다: ' + ((e2 && e2.message) || e2), 'bad');
       return;
+    }
+
+    if (vtrack && vtrack.requestFrame) {
+      try { vtrack.requestFrame(); } catch (e3) {}
     }
 
     if (state.bgm.url && state.audio.el) {
@@ -1786,6 +1829,9 @@
     var total = state.recTotal;
     var tt = Math.min(t, total);
     drawFrame(tt);
+    if (state.vtrack && state.vtrack.requestFrame) {
+      try { state.vtrack.requestFrame(); } catch (e) {}
+    }
     var pct = Math.min(100, (t / total) * 100);
     els.recFill.style.width = pct.toFixed(1) + '%';
     els.recStat.className = 'recstat';
@@ -1833,9 +1879,21 @@
     updateTotals();
 
     if (!blob.size) {
-      setRecStat('녹화된 데이터가 없습니다. 다시 시도해 주세요.', 'bad');
+      /* 이 브라우저에서 그 형식으로 녹화가 안 되는 경우(예: 크롬 MP4+AAC),
+         그 형식을 빼고 다른 형식으로 한 번만 다시 시도합니다. */
+      if (mime) state.recBadMimes[mime] = true;
+      var next = pickMime(!!state.bgm.url);
+      if (next && next !== mime && state.recRetry < 1) {
+        state.recRetry++;
+        setRecStat(mimeLabel(mime) + ' 녹화가 이 브라우저에서 되지 않아 ' + mimeLabel(next) + '로 다시 시도합니다…', '');
+        setTimeout(function () { startRecord(); }, 500);
+        return;
+      }
+      setRecStat('녹화된 데이터가 없습니다. 다시 시도해 주세요.' + (state.recError ? ' (' + state.recError + ')' : ''), 'bad');
       return;
     }
+    state.vtrack = null;
+    state.recRetry = 0;
 
     var ext = /mp4/i.test(type) ? 'mp4' : 'webm';
     var name = 'reels-' + stampNow() + '.' + ext;
@@ -1853,7 +1911,11 @@
   }
 
   function bindRecord() {
-    els.recBtn.addEventListener('click', startRecord);
+    els.recBtn.addEventListener('click', function () {
+      state.recRetry = 0;
+      state.recError = '';
+      startRecord();
+    });
 
     els.shareBtn.addEventListener('click', function () {
       if (!state.last) return;
