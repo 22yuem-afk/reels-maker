@@ -221,6 +221,20 @@
   .saved p{margin:0 0 8px;font-size:12px;color:var(--ok);line-height:1.6}
   .saved .toolbar{margin-top:0}
 
+  /* ---------- 블로그 가져오기 ---------- */
+  .bloginfo{margin-top:12px;border:1px solid var(--line);border-radius:12px;background:var(--paper-2);padding:12px}
+  .blogtitle{font-family:var(--serif);font-size:14px;line-height:1.45;margin:0 0 4px;color:var(--ink);font-weight:600;word-break:keep-all}
+  .blogmeta{font-size:11.5px;color:var(--muted);margin:0 0 10px;word-break:break-all}
+  .blogmeta b{color:var(--accent);font-weight:600}
+  .bloginfo .toolbar{margin-top:10px}
+  .bloginfo .acc{margin-top:10px;background:var(--paper)}
+  .impstat{font-size:11.5px;color:var(--muted);line-height:1.65;margin:10px 2px 0;min-height:17px}
+  .impstat b{font-weight:600;color:var(--ink-2)}
+  .impstat.bad{color:var(--bad)}
+  .impstat.ok{color:var(--ok)}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line-2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
   /* ---------- toast ---------- */
   #toast{
     position:fixed;left:50%;bottom:26px;transform:translate(-50%,18px);background:var(--ink);color:#FBF6EC;
@@ -352,9 +366,47 @@
     <!-- 왼쪽: 편집 -->
     <div class="col-left">
 
+      <section class="card" id="importCard">
+        <h2>🔗 네이버 블로그 → 릴스</h2>
+        <p class="cap">블로그 <b>글 주소만</b> 붙여넣으면 본문 사진과 글을 읽어 컷·자막으로 만들어 줍니다.</p>
+        <label class="fld">
+          <span class="flab"><span>🔗 네이버 블로그 글 주소</span><em class="opt">blog.naver.com</em></span>
+          <input type="text" id="blogUrl" placeholder="https://m.blog.naver.com/9961_5/224492148970" inputmode="url" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="actions" style="margin-top:0">
+          <button class="btn primary" id="blogBtn" type="button">📥 사진·글 가져오기</button>
+          <button class="btn small hidden" id="blogMore" type="button">＋남은 사진 더 담기</button>
+        </div>
+        <p class="impstat" id="blogStatus">지도·배너·스티커는 자동으로 빼고 <b>본문 사진만</b> 담습니다. 먼저 12장까지 담고, 남으면 더 담을 수 있습니다.</p>
+        <div class="bloginfo hidden" id="blogInfo">
+          <p class="blogtitle" id="blogTitle"></p>
+          <p class="blogmeta" id="blogMeta"></p>
+          <details class="acc" id="blogTextBox">
+            <summary>본문 글 보기 · 고치기</summary>
+            <div class="accbody">
+              <textarea id="blogText" rows="6" placeholder="가져온 블로그 본문"></textarea>
+              <p class="note">AI 자막은 여기 적힌 글을 근거로 씁니다. 필요 없는 문장은 지워도 됩니다.</p>
+            </div>
+          </details>
+          <div class="toolbar">
+            <button class="btn small" id="blogAIBtn" type="button">✨ 본문으로 AI 자막</button>
+            <button class="btn small" id="blogSplitBtn" type="button">📝 본문 문장으로 자막 초안</button>
+            <button class="btn small" id="blogPromptBtn" type="button">📋 AI 프롬프트 복사</button>
+          </div>
+          <details class="acc" id="aiPasteBox">
+            <summary>AI 응답 JSON 붙여넣기</summary>
+            <div class="accbody">
+              <textarea id="aiPaste" rows="4" spellcheck="false" placeholder='{"hook":"...","cuts":[{"i":2,"text":"..."}],"caption":"...","hashtags":["#..."]}'></textarea>
+              <div class="toolbar"><button class="btn small" id="aiPasteBtn" type="button">적용</button></div>
+              <p class="note">다른 AI(ChatGPT·Gemini)에서 받은 JSON을 그대로 넣으면 컷 자막과 캡션에 채워집니다.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
       <section class="card">
-        <h2>사진 담기</h2>
-        <p class="cap">여러 장을 한 번에 고르면 <b>고른 순서대로</b> 컷이 됩니다. 끌어다 놓아도 됩니다.</p>
+        <h2>사진 담기 · 컷 편집</h2>
+        <p class="cap">블로그에서 가져온 사진이 여기 <b>컷</b>으로 들어옵니다. 사진만 직접 고를 때는 아래 <b>사진 선택</b>을 쓰세요.</p>
         <label class="drop" id="dropZone">
           <input type="file" id="fileInput" accept="image/*" multiple hidden>
           <span class="dropicon">🖼️</span>
@@ -753,6 +805,8 @@
     rec: false, recRaf: 0, recStart: 0, recTotal: 0,
     vtrack: null, recBadMimes: {}, recRetry: 0, recError: '',
     busyAI: false,
+    busyBlog: false,
+    blogContext: null,
     bgm: { file: null, url: '', name: '', playing: false },
     last: null,
     audio: { ctx: null, el: null, src: null, gain: null, dest: null }
@@ -811,6 +865,8 @@
   function cacheEls() {
     [
       'settingsToggle', 'settingsPanel', 'keyDot', 'keyLabel', 'provider', 'model', 'apikey', 'showKey', 'saveKey', 'keyStatus',
+      'blogUrl', 'blogBtn', 'blogMore', 'blogStatus', 'blogInfo', 'blogTitle', 'blogMeta', 'blogText',
+      'blogAIBtn', 'blogSplitBtn', 'blogPromptBtn', 'aiPaste', 'aiPasteBtn', 'aiPasteBox',
       'dropZone', 'fileInput', 'cutList', 'cutEmpty', 'cutCount', 'totalDur', 'clearCuts',
       'topic', 'sendPhotos', 'aiBtn', 'aiHint', 'caption', 'captionBox', 'copyCaption', 'copyTags',
       'fitSeg', 'size', 'subSize', 'posSeg', 'bgmInput', 'bgmPlay', 'bgmClear', 'bgmName', 'vol', 'volVal',
@@ -1939,6 +1995,481 @@
   }
 
   /* =========================================================
+     네이버 블로그 글 → 사진·본문 가져오기
+     - r.jina.ai 로 본문 마크다운을 받아 본문 사진 URL 과 글을 뽑는다
+     - 사진은 wsrv.nl 프록시로 받아 crossOrigin 이미지로 만든다
+       (네이버 이미지 서버는 CORS 를 열지 않아, 그대로 그리면 tainted canvas 가 된다)
+     ========================================================= */
+  var JINA = 'https://r.jina.ai/';
+  var IMG_PROXY = 'https://wsrv.nl/?url=';
+  var BLOG_BATCH = 12;
+  var PHOTO_HOSTS = ['mblogthumb-phinf.pstatic.net', 'postfiles.pstatic.net', 'blogfiles.pstatic.net', 'blogfiles.naver.net'];
+  var PHOTO_BLOCK = ['static.map', 'staticmap.bin', 'map.pstatic.net', 'blogfooter', 'stylec.co.kr', 'revu.net',
+    'dinnerqueen.net', 'popomon.com', 'reviewnote.co.kr', 'storep-phinf', 'ssl.pstatic.net', 'blogpfthumb', 'editor-static'];
+
+  /* --- 주소 정규화: blog.naver.com/아이디/글번호 세 가지 형식 모두 m.blog 로 --- */
+  function normBlogUrl(raw) {
+    var s = String(raw || '').trim().replace(/\s+/g, '');
+    if (!s) return null;
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    var u;
+    try { u = new URL(s); } catch (e) { return null; }
+    var host = String(u.hostname || '').toLowerCase().replace(/^www\./, '');
+    if (!/(^|\.)blog\.naver\.com$/.test(host) && !/(^|\.)blog\.me\.naver\.com$/.test(host)) return null;
+    var blogId = '', logNo = '';
+    try {
+      blogId = u.searchParams.get('blogId') || '';
+      logNo = u.searchParams.get('logNo') || '';
+    } catch (e1) {}
+    var segs = String(u.pathname || '').split('/').filter(function (x) { return !!x; });
+    for (var i = 0; i < segs.length; i++) {
+      var seg = segs[i];
+      if (/\.naver$/i.test(seg) || /^postlist/i.test(seg) || /^postview/i.test(seg)) continue;
+      if (!blogId) { blogId = seg; continue; }
+      if (!logNo && /^\d+$/.test(seg)) { logNo = seg; break; }
+    }
+    blogId = String(blogId).replace(/[^A-Za-z0-9_\-]/g, '');
+    logNo = String(logNo).replace(/[^0-9]/g, '');
+    if (!blogId || !logNo) return null;
+    return { blogId: blogId, logNo: logNo, url: 'https://m.blog.naver.com/' + blogId + '/' + logNo };
+  }
+
+  /* --- 이미지 주소 판별 --- */
+  function photoBase(u) { return String(u || '').split('#')[0].split('?')[0]; }
+  function photoHost(u) {
+    var m = /^https?:\/\/([^\/?#]+)/i.exec(String(u || ''));
+    return m ? m[1].toLowerCase() : '';
+  }
+  function isBodyPhoto(u) {
+    var host = photoHost(u);
+    if (!host) return false;
+    var ok = false;
+    for (var i = 0; i < PHOTO_HOSTS.length; i++) {
+      var h = PHOTO_HOSTS[i];
+      if (host === h || host.slice(-(h.length + 1)) === '.' + h) { ok = true; break; }
+    }
+    if (!ok) return false;
+    var low = String(u).toLowerCase();
+    for (var j = 0; j < PHOTO_BLOCK.length; j++) if (low.indexOf(PHOTO_BLOCK[j]) >= 0) return false;
+    return true;
+  }
+  /* 네이버 썸네일은 ?type=w800 이 붙어야 원본이 열린다(없으면 404) */
+  function photoFull(u) {
+    var base = photoBase(u);
+    return /pstatic\.net$/i.test(photoHost(base)) ? base + '?type=w800' : base;
+  }
+  function photoProxy(u) {
+    return IMG_PROXY + encodeURIComponent(u) + '&w=1200';
+  }
+
+  function cleanBlogLine(line) {
+    var t = String(line == null ? '' : line);
+    t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
+    t = t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+    t = t.replace(/\*\*|__|~~|`/g, '');
+    t = t.replace(/^\s*(?:>+|[-–—•·]+)\s+/, '');
+    t = t.replace(/[\u200B-\u200D\uFEFF\u2060]/g, '');
+    t = t.replace(/\s+/g, ' ').trim();
+    return t;
+  }
+
+  /* --- r.jina.ai 마크다운 → 제목·본문 문단·본문 사진(순서 유지) --- */
+  function parseBlogMarkdown(txt) {
+    var lines = String(txt || '').replace(/\r/g, '').split('\n');
+    var title = '', start = 0, headerAt = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (/^\s*Markdown Content:/.test(lines[i])) headerAt = i;
+      if (!title) {
+        var mt = /^\s*Title:\s*(.+)$/.exec(lines[i]);
+        if (mt) title = cleanBlogLine(mt[1]);
+      }
+    }
+    if (headerAt >= 0) start = headerAt + 1;
+    if (!title) {
+      for (var k = start; k < lines.length; k++) {
+        var mh = /^#{1,3}\s+(.+)$/.exec(lines[k]);
+        if (mh) { title = cleanBlogLine(mh[1]); break; }
+      }
+    }
+
+    var items = [], seen = {}, cur = [];
+    function flush() {
+      var t = cur.join(' ').replace(/\s+/g, ' ').trim();
+      cur = [];
+      if (!t) return;
+      if (/^©/.test(t) || /naver\s*corp/i.test(t)) return;
+      if (/^https?:\/\//i.test(t)) return;
+      items.push({ t: 'text', s: t });
+    }
+    for (var li = start; li < lines.length; li++) {
+      var line = lines[li];
+      var re = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g, mm, found = [];
+      while ((mm = re.exec(line)) !== null) found.push(mm[1]);
+      var textPart = cleanBlogLine(line);
+      if (!found.length) {
+        if (textPart) cur.push(textPart);
+        else flush();
+        continue;
+      }
+      for (var fi = 0; fi < found.length; fi++) {
+        var u = found[fi];
+        if (!isBodyPhoto(u)) continue;
+        var base = photoBase(u);
+        if (!base || seen[base]) continue;
+        seen[base] = true;
+        flush();
+        items.push({ t: 'img', url: base });
+      }
+      if (textPart) cur.push(textPart);
+    }
+    flush();
+
+    var images = [], paras = [];
+    for (var q = 0; q < items.length; q++) {
+      var it = items[q];
+      if (it.t === 'text') { paras.push(it.s); continue; }
+      var near = '';
+      for (var r = q + 1; r < items.length; r++) {
+        if (items[r].t === 'text') { near += (near ? ' ' : '') + items[r].s; if (near.length > 50) break; }
+      }
+      if (!near) {
+        for (var r2 = q - 1; r2 >= 0; r2--) {
+          if (items[r2].t === 'text') { near = items[r2].s; break; }
+        }
+      }
+      images.push({ url: it.url, near: String(near).slice(0, 160) });
+    }
+    return { title: title, text: paras.join('\n'), paragraphs: paras, images: images };
+  }
+
+  /* --- 사진 로드: 프록시(wsrv) → 원본(crossOrigin) → 원본(tainted) --- */
+  function loadPhoto(base) {
+    var full = photoFull(base);
+    var plan = [
+      { src: photoProxy(full), cors: true },
+      { src: full, cors: true },
+      { src: full, cors: false }
+    ];
+    return new Promise(function (resolve) {
+      var i = 0;
+      function attempt() {
+        if (i >= plan.length) { resolve(null); return; }
+        var p = plan[i++];
+        var img = new Image();
+        if (p.cors) img.crossOrigin = 'anonymous';
+        img.referrerPolicy = 'no-referrer';
+        img.onload = function () {
+          if (!img.naturalWidth || !img.naturalHeight) { attempt(); return; }
+          resolve({ img: img, src: p.src, full: full, tainted: !p.cors });
+        };
+        img.onerror = function () { attempt(); };
+        try { img.src = p.src; } catch (e) { attempt(); }
+      }
+      attempt();
+    });
+  }
+
+  function seq(list, fn) {
+    var chain = Promise.resolve();
+    list.forEach(function (item) { chain = chain.then(function () { return fn(item); }); });
+    return chain;
+  }
+
+  function hasCutUrl(u) {
+    for (var i = 0; i < state.cuts.length; i++) if (state.cuts[i].remote === u) return true;
+    return false;
+  }
+
+  function addBlogBatch() {
+    var bc = state.blogContext;
+    if (!bc) return Promise.resolve({ added: 0, tainted: 0, failed: 0 });
+    var avail = [], i;
+    for (i = bc.imported; i < bc.images.length && avail.length < BLOG_BATCH; i++) {
+      if (hasCutUrl(bc.images[i].url)) { bc.imported++; continue; }
+      avail.push(bc.images[i]);
+    }
+    if (!avail.length) return Promise.resolve({ added: 0, tainted: 0, failed: 0 });
+    var added = 0, tainted = 0, failed = 0;
+    return seq(avail, function (e) {
+      return loadPhoto(e.url).then(function (got) {
+        bc.imported++;
+        if (!got) { failed++; return; }
+        if (got.tainted) tainted++;
+        var first = state.cuts.length === 0;
+        state.cuts.push({
+          id: state.nextId++,
+          name: '블로그 사진 ' + (state.cuts.length + 1),
+          url: got.src,
+          remote: e.url,
+          img: got.img,
+          w: got.img.naturalWidth || 1080,
+          h: got.img.naturalHeight || 1350,
+          dur: 2.5,
+          motion: 'zoom-in',
+          text: '',
+          hint: e.near || '',
+          title: first,
+          bg: null
+        });
+        added++;
+      });
+    }).then(function () {
+      renderCuts();
+      updateTotals();
+      if (state.cuts.length) drawFrame(state.pos);
+      return { added: added, tainted: tainted, failed: failed };
+    });
+  }
+
+  function setImpStatus(msg, cls) {
+    if (!els.blogStatus) return;
+    els.blogStatus.className = 'impstat' + (cls ? ' ' + cls : '');
+    els.blogStatus.innerHTML = msg || '';
+  }
+
+  function updateMoreBtn() {
+    var bc = state.blogContext;
+    if (!bc) { els.blogMore.classList.add('hidden'); return; }
+    var left = bc.images.length - bc.imported;
+    if (left > 0) {
+      els.blogMore.classList.remove('hidden');
+      els.blogMore.textContent = '＋남은 사진 ' + Math.min(left, BLOG_BATCH) + '장 더 담기';
+    } else {
+      els.blogMore.classList.add('hidden');
+    }
+  }
+
+  function paintBlogInfo() {
+    var bc = state.blogContext;
+    if (!bc) return;
+    els.blogInfo.classList.remove('hidden');
+    els.blogTitle.textContent = bc.title || '(제목 없음)';
+    els.blogMeta.innerHTML = '본문 <b>' + bc.text.length + '자</b> · 본문 사진 <b>' + bc.images.length + '장</b> · ' + esc(bc.url);
+    els.blogText.value = bc.text.slice(0, 20000);
+    if (!els.topic.value.trim() && bc.title) els.topic.value = bc.title.slice(0, 80);
+    if (currentKey()) {
+      setAIStatus('블로그 본문까지 읽었습니다. ✨ AI 자막 자동 채우기를 누르면 본문 내용으로 첫 컷 타이틀과 컷 자막을 씁니다.', '');
+    } else {
+      setAIStatus('블로그 본문까지 읽었습니다. API 키가 없어도 📝 본문 문장으로 자막 초안을 쓰거나, 📋 AI 프롬프트 복사로 다른 AI에 붙여넣어 받을 수 있습니다.', '');
+    }
+    updateMoreBtn();
+  }
+
+  function importBlog() {
+    if (state.busyBlog) return;
+    var norm = normBlogUrl(els.blogUrl.value);
+    if (!norm) {
+      setImpStatus('네이버 블로그 글 주소가 아닙니다. <b>blog.naver.com/아이디/글번호</b> 형식으로 넣어 주세요.', 'bad');
+      els.blogUrl.focus();
+      return;
+    }
+    if (state.cuts.length && !confirm('지금 컷 ' + state.cuts.length + '개가 있습니다. 블로그 사진을 뒤에 이어 붙일까요?')) return;
+
+    state.busyBlog = true;
+    els.blogBtn.disabled = true;
+    els.blogBtn.textContent = '📥 읽는 중…';
+    els.blogMore.classList.add('hidden');
+    els.blogUrl.value = norm.url;
+    setImpStatus('<span class="spin"></span>블로그 글을 읽는 중… (보통 5~15초)', '');
+
+    fetch(JINA + norm.url, { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) {
+          if (res.status === 429) throw new Error('추출 서버가 잠시 붐빕니다(1분에 20회 제한). 1분 뒤 다시 눌러 주세요.');
+          if (res.status === 451) throw new Error('서버가 이 글의 추출을 막았습니다. 비공개 글이 아닌지 확인해 주세요.');
+          throw new Error('블로그 글을 읽지 못했습니다 (HTTP ' + res.status + '). 주소를 확인하거나 잠시 뒤 다시 시도해 주세요.');
+        }
+        return res.text();
+      })
+      .then(function (txt) {
+        var p = parseBlogMarkdown(txt);
+        if (!p.images.length) throw new Error('본문 사진을 찾지 못했습니다. 비공개 글이거나 사진이 없는 글인지 확인해 주세요.');
+        state.blogContext = {
+          url: norm.url,
+          title: p.title,
+          text: p.text,
+          paragraphs: p.paragraphs,
+          images: p.images,
+          imported: 0
+        };
+        paintBlogInfo();
+        return addBlogBatch();
+      })
+      .then(function (r) {
+        var bc = state.blogContext;
+        var left = bc.images.length - bc.imported;
+        var msg;
+        if (r.added) {
+          msg = '본문 사진 <b>' + bc.images.length + '장</b> 중 <b>' + r.added + '장</b>을 담았습니다';
+        } else if (r.failed) {
+          msg = '사진을 하나도 불러오지 못했습니다. 잠시 뒤 다시 눌러 주세요.';
+          bc.imported = 0;
+        } else {
+          msg = '이 블로그 사진은 이미 모두 담겨 있습니다. 남은 사진이 없습니다.';
+        }
+        if (r.failed && r.added) msg += ' · ' + r.failed + '장은 열지 못했습니다';
+        if (r.tainted) msg += '<br>⚠️ ' + r.tainted + '장은 네이버 서버에서 직접 받아와, 그 사진이 든 영상은 저장(녹화)이 막힐 수 있습니다. 잠시 뒤 다시 가져와 주세요.';
+        msg += '<br>필요 없는 컷은 목록에서 <b>✕</b>로 지우세요.' + (left > 0 ? ' 남은 ' + left + '장은 <b>＋남은 사진 더 담기</b>로.' : '');
+        setImpStatus(msg, r.added ? 'ok' : 'bad');
+        updateMoreBtn();
+        if (r.added) toast(r.added + '장을 릴스 컷으로 담았습니다');
+      })
+      .catch(function (err) {
+        var m = (err && err.message) ? err.message : '가져오지 못했습니다.';
+        if (/Failed to fetch|NetworkError|Load failed|Network request failed/i.test(m)) {
+          m = '추출 서버(r.jina.ai)에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.';
+        }
+        setImpStatus(m, 'bad');
+      })
+      .then(function () {
+        state.busyBlog = false;
+        els.blogBtn.disabled = false;
+        els.blogBtn.textContent = '📥 사진·글 가져오기';
+      });
+  }
+
+  function blogMoreAdd() {
+    if (state.busyBlog || !state.blogContext) return;
+    state.busyBlog = true;
+    els.blogMore.disabled = true;
+    var label = els.blogMore.textContent;
+    els.blogMore.textContent = '… 담는 중';
+    addBlogBatch().then(function (r) {
+      var bc = state.blogContext;
+      var left = bc.images.length - bc.imported;
+      var msg = r.added
+        ? '사진 <b>' + r.added + '장</b>을 더 담았습니다'
+        : '더 담을 사진이 없습니다';
+      if (left > 0) msg += ' · 남은 ' + left + '장';
+      if (r.failed) msg += ' · ' + r.failed + '장은 열지 못했습니다';
+      if (r.tainted) msg += '<br>⚠️ ' + r.tainted + '장은 영상 저장이 막힐 수 있습니다.';
+      setImpStatus(msg, r.added ? 'ok' : '');
+      updateMoreBtn();
+      if (r.added) toast(r.added + '장을 더 담았습니다');
+    }).catch(function () {
+      setImpStatus('사진을 더 담지 못했습니다. 잠시 뒤 다시 시도해 주세요.', 'bad');
+    }).then(function () {
+      state.busyBlog = false;
+      els.blogMore.disabled = false;
+      if (els.blogMore.textContent === '… 담는 중') els.blogMore.textContent = label;
+    });
+  }
+
+  /* --- 키가 없을 때: 본문 문장을 컷 자막 초안으로 --- */
+  function subtitleCandidates(bc) {
+    var out = [], seen = {};
+    var paras = (bc.paragraphs && bc.paragraphs.length) ? bc.paragraphs : String(bc.text || '').split('\n');
+    for (var i = 0; i < paras.length; i++) {
+      var t = String(paras[i] || '').replace(/\s+/g, ' ').trim();
+      if (t.length < 5) continue;
+      if (!/[가-힣A-Za-z]/.test(t)) continue;
+      if (/^https?:/i.test(t)) continue;
+      if (/naver\s*corp/i.test(t)) continue;
+      if (seen[t]) continue;
+      seen[t] = true;
+      if (t.length > 44) t = t.slice(0, 44).replace(/[\s,·]+$/, '') + '…';
+      out.push(t);
+    }
+    return out;
+  }
+
+  function hookFromTitle(title) {
+    var t = String(title || '').replace(/^\[[^\]]*\]\s*/, '').trim();
+    if (!t) t = String(title || '').trim();
+    t = t.replace(/[\s\-|:]+$/, '');
+    if (t.length > 24) {
+      var cut = t.slice(0, 24);
+      var sp = cut.lastIndexOf(' ');
+      if (sp > 10) cut = cut.slice(0, sp);
+      t = cut;
+    }
+    return t.trim();
+  }
+
+  function splitBlogToCuts() {
+    var bc = state.blogContext;
+    if (!bc) { toast('먼저 블로그 글을 가져와 주세요'); return; }
+    if (!state.cuts.length) { toast('컷이 없습니다. 사진을 먼저 담아 주세요'); return; }
+    if (hasAnyText() && !confirm('지금 적힌 자막을 본문 문장으로 바꿀까요?')) return;
+    var cands = subtitleCandidates(bc);
+    var used = {}, ci = 0;
+    function pick() {
+      while (ci < cands.length) {
+        var t = cands[ci++];
+        if (!used[t]) { used[t] = 1; return t; }
+      }
+      return '';
+    }
+    state.cuts.forEach(function (c, i) {
+      if (i === 0) {
+        c.text = hookFromTitle(bc.title) || pick();
+        c.title = true;
+        return;
+      }
+      var t = '';
+      var h = String(c.hint || '').replace(/\s+/g, ' ').trim();
+      if (h.length >= 5 && /[가-힣A-Za-z]/.test(h)) {
+        if (h.length > 44) h = h.slice(0, 44).replace(/[\s,·]+$/, '') + '…';
+        if (!used[h]) { used[h] = 1; t = h; }
+      }
+      if (!t) t = pick();
+      c.text = t;
+      c.title = false;
+    });
+    renderCuts();
+    if (state.cuts.length) drawFrame(0);
+    toast('본문 문장을 자막으로 나눴습니다. 컷별로 다듬어 주세요');
+  }
+
+  function blogExcerpt(text, max) {
+    var t = String(text || '').replace(/\n{2,}/g, '\n').trim();
+    if (t.length <= max) return t;
+    var cut = t.slice(0, max);
+    var at = cut.lastIndexOf('\n');
+    if (at > max * 0.6) cut = cut.slice(0, at);
+    return cut + ' …';
+  }
+
+  function copyBlogPrompt() {
+    if (!state.cuts.length && !els.topic.value.trim()) {
+      toast('주제나 사진을 먼저 넣어 주세요');
+      return;
+    }
+    var prompt = buildAIPrompt(els.topic.value.trim(), state.cuts.length);
+    prompt += '\n\n위 규칙대로 JSON만 출력해. 릴스 메이커의 ‘AI 응답 JSON 붙여넣기’에 그대로 넣을 거야.';
+    copyText(prompt).then(function () { toast('AI 프롬프트를 복사했습니다'); })
+      .catch(function () { toast('복사하지 못했습니다. 본문 글을 직접 복사해 주세요'); });
+  }
+
+  function bindBlog() {
+    els.blogBtn.addEventListener('click', importBlog);
+    els.blogUrl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); importBlog(); }
+    });
+    els.blogMore.addEventListener('click', blogMoreAdd);
+    els.blogAIBtn.addEventListener('click', function () { aiFill(); });
+    els.blogSplitBtn.addEventListener('click', splitBlogToCuts);
+    els.blogPromptBtn.addEventListener('click', copyBlogPrompt);
+    els.blogText.addEventListener('input', function () {
+      if (!state.blogContext) return;
+      state.blogContext.text = els.blogText.value;
+      state.blogContext.paragraphs = els.blogText.value.split('\n');
+    });
+    els.aiPasteBtn.addEventListener('click', function () {
+      var raw = els.aiPaste.value.trim();
+      if (!raw) { toast('붙여넣을 AI 응답이 없습니다'); return; }
+      try {
+        var o = parseJSONLoose(raw);
+        applyAI(o);
+        els.aiPaste.value = '';
+        els.aiPasteBox.open = false;
+      } catch (e) {
+        toast('JSON을 읽지 못했습니다. 응답 전체를 그대로 붙여넣어 주세요');
+      }
+    });
+  }
+
+  /* =========================================================
      AI 자막
      ========================================================= */
   var AI_SYS = '너는 인스타그램 릴스 자막을 쓰는 한국어 카피라이터다. ' +
@@ -1948,7 +2479,9 @@
 
   function buildAIPrompt(topic, n) {
     var lines = [];
-    lines.push('주제/장소: ' + (topic || '(사진만 보고 추정)'));
+    var bc = state.blogContext;
+    lines.push('주제/장소: ' + (topic || (bc && bc.title) || '(사진만 보고 추정)'));
+    if (bc && bc.title) lines.push('블로그 글 제목: ' + bc.title);
     lines.push('컷 수: ' + n + '개');
     if (n) {
       lines.push('컷 순서와 사진 비율:');
@@ -1958,8 +2491,14 @@
         lines.push('  ' + (i + 1) + '번: ' + ratio + ' (' + c.w + '×' + c.h + ')' + (c.title ? ' · 큰 타이틀 컷' : ''));
       }
     }
+    if (bc && bc.text) {
+      lines.push('');
+      lines.push('블로그 본문 발췌(실제 글, 이 내용을 근거로 쓸 것):');
+      lines.push(blogExcerpt(bc.text, 2600));
+    }
     lines.push('');
     lines.push('규칙:');
+    lines.push('- 블로그 본문에 나온 실제 표현·메뉴·장소를 우선 활용하고, 본문에 없는 가격·영업시간·주소는 지어내지 않는다.');
     lines.push('- hook: 첫 컷에 크게 들어갈 후킹 타이틀. 최대 두 줄, 줄바꿈은 \\n 으로. 20자 안팎. 낚시성 과장 금지.');
     lines.push('- cuts: 첫 컷을 제외한 2번째~마지막 컷의 자막. 컷마다 한 줄, 14자 안팎. 사진 내용을 구체적으로.');
     lines.push('- caption: 인스타 캡션 3~5줄. 담백하게. 마지막에 해시태그 8~12개.');
@@ -1981,7 +2520,8 @@
     g.fillStyle = '#FFFFFF';
     g.fillRect(0, 0, w, h);
     try { g.drawImage(img, 0, 0, w, h); } catch (e) {}
-    var url = c.toDataURL('image/jpeg', 0.72);
+    var url = '';
+    try { url = c.toDataURL('image/jpeg', 0.72); } catch (e) { return null; }
     return { mime: 'image/jpeg', data: url.split(',')[1] || '' };
   }
 
@@ -2110,7 +2650,10 @@
     var imgs = [];
     if (els.sendPhotos.checked && state.cuts.length) {
       var nimg = Math.min(8, state.cuts.length);
-      for (var i = 0; i < nimg; i++) imgs.push(resizeForAI(state.cuts[i].img, 720));
+      for (var i = 0; i < nimg; i++) {
+        var rimg = resizeForAI(state.cuts[i].img, 720);
+        if (rimg && rimg.data) imgs.push(rimg);
+      }
     }
     var prompt = buildAIPrompt(topic, state.cuts.length);
     var cfg = { key: key, model: model };
@@ -2208,6 +2751,7 @@
     bindTimeline();
     bindBgm();
     bindRecord();
+    bindBlog();
     bindAI();
 
     paintSettings();
