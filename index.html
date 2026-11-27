@@ -2122,7 +2122,7 @@
       if (it.t === 'text') { paras.push(it.s); continue; }
       var near = '';
       for (var r = q + 1; r < items.length; r++) {
-        if (items[r].t === 'text') { near += (near ? ' ' : '') + items[r].s; if (near.length > 50) break; }
+        if (items[r].t === 'text') { near = items[r].s; break; }
       }
       if (!near) {
         for (var r2 = q - 1; r2 >= 0; r2--) {
