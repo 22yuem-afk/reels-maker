@@ -2092,10 +2092,9 @@
       }
     }
 
-    var items = [], seen = {}, cur = [];
-    function flush() {
-      var t = cur.join(' ').replace(/\s+/g, ' ').trim();
-      cur = [];
+    var items = [], seen = {};
+    function addText(t) {
+      t = String(t || '').replace(/\s+/g, ' ').trim();
       if (!t) return;
       if (/^©/.test(t) || /naver\s*corp/i.test(t)) return;
       if (/^https?:\/\//i.test(t)) return;
@@ -2106,23 +2105,16 @@
       var re = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g, mm, found = [];
       while ((mm = re.exec(line)) !== null) found.push(mm[1]);
       var textPart = cleanBlogLine(line);
-      if (!found.length) {
-        if (textPart) cur.push(textPart);
-        else flush();
-        continue;
-      }
       for (var fi = 0; fi < found.length; fi++) {
         var u = found[fi];
         if (!isBodyPhoto(u)) continue;
         var base = photoBase(u);
         if (!base || seen[base]) continue;
         seen[base] = true;
-        flush();
         items.push({ t: 'img', url: base });
       }
-      if (textPart) cur.push(textPart);
+      addText(textPart);
     }
-    flush();
 
     var images = [], paras = [];
     for (var q = 0; q < items.length; q++) {
