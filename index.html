@@ -235,6 +235,25 @@
   .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line-2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px;margin-right:6px}
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  /* ---------- 테마 프리셋 ---------- */
+  .themegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .themebtn{
+    display:flex;align-items:flex-start;gap:8px;text-align:left;border:1px solid var(--line-2);background:#FFFEFB;
+    color:var(--ink-2);border-radius:11px;padding:9px 10px;line-height:1.35;min-width:0;font-family:var(--sans)
+  }
+  .themebtn:hover{border-color:var(--accent);background:#FFF9EF}
+  .themebtn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+  .themebtn .ti{font-size:15px;line-height:1.2;flex:0 0 auto}
+  .themebtn .tb{min-width:0;display:block}
+  .themebtn .tn{display:block;font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .themebtn .td{display:block;font-size:10.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .themebtn[aria-pressed="true"] .tn,.themebtn[aria-pressed="true"] .td{color:var(--accent)}
+  .themenote{font-size:11.5px;color:var(--muted);line-height:1.6;margin:10px 2px 0}
+  .themenote b{font-weight:600;color:var(--ink-2)}
+  .themeoff{margin-top:8px;border:0;background:transparent;color:var(--muted);font-size:11.5px;text-decoration:underline;padding:2px 0}
+  .themeoff:hover{color:var(--bad)}
+  @media (max-width:560px){.themegrid{grid-template-columns:1fr}}
+
   /* ---------- toast ---------- */
   #toast{
     position:fixed;left:50%;bottom:26px;transform:translate(-50%,18px);background:var(--ink);color:#FBF6EC;
@@ -402,6 +421,14 @@
             </div>
           </details>
         </div>
+      </section>
+
+      <section class="card" id="themeCard">
+        <h2>🎨 테마 프리셋</h2>
+        <p class="cap">테마를 고르면 <b>컷 시간 · 모션 · 자막 위치/크기</b>가 한 번에 맞춰지고, AI 자막도 그 테마 말투로 씁니다.</p>
+        <div class="themegrid" id="themeGrid" role="group" aria-label="테마 프리셋"></div>
+        <p class="themenote" id="themeNote"></p>
+        <button class="themeoff hidden" id="themeOff" type="button">테마 끄기 (기본 말투로)</button>
       </section>
 
       <section class="card">
@@ -800,7 +827,8 @@
       keys: { gemini: '', openai: '' },
       models: { gemini: 'gemini-3.5-flash-lite', openai: 'gpt-4o-mini' }
     },
-    opts: { fit: 'cover', size: 1080, subSize: 1, subPos: 'bottom', vol: 0.8 },
+    opts: { fit: 'cover', size: 1080, subSize: 1, subPos: 'bottom', titleScale: 1, vol: 0.8 },
+    themePreset: '',
     playing: false, rafId: 0, pos: 0,
     rec: false, recRaf: 0, recStart: 0, recTotal: 0,
     vtrack: null, recBadMimes: {}, recRetry: 0, recError: '',
@@ -813,6 +841,75 @@
   };
 
   var els = {};
+
+  /* =========================================================
+     테마 프리셋
+     - 테마를 고르면 지금 담긴 컷의 표시 시간·모션과 자막 위치·크기를 한 번에 맞춤
+     - state.themePreset 은 AI 자막·프롬프트의 문체 지시에도 함께 쓰임
+     ========================================================= */
+  var THEMES = {
+    travel: {
+      name: '감성 여행', emoji: '🌿',
+      dur: 3.0, motions: ['zoom-in', 'zoom-out'],
+      subPos: 'center', subSize: 1, titleScale: 1, firstTitle: false,
+      short: '3.0초 · 줌 교차 · 중앙 자막',
+      mood: '여유로운 3.0초 컷, 부드러운 줌인/줌아웃 교차, 중앙 자막, 담백한 서사·공간 감성',
+      hookLen: 22, lineLen: 16,
+      rules: [
+        '- 문체: 여행 에세이. 그 공간의 공기·빛·계절·동선을 담백한 평서체로 쓴다. 감탄사와 이모지는 쓰지 않는다.',
+        '- 자막은 장면 설명보다 그 자리에 있던 감각(빛, 소리, 온도, 거리)을 한 줄로 남긴다.',
+        '- 첫 컷 타이틀은 장소 이름보다 그날의 장면을 담아 조용히 연다.'
+      ]
+    },
+    food: {
+      name: '맛집·카페', emoji: '🍽️',
+      dur: 2.0, motions: ['zoom-in', 'pan'],
+      subPos: 'bottom', subSize: 1, titleScale: 1, firstTitle: false,
+      short: '2.0초 · 줌인·패닝 · 하단 자막',
+      mood: '경쾌한 2.0초 컷, 줌인+패닝 위주, 하단 자막, 메뉴·맛·가격 꿀팁 중심',
+      hookLen: 18, lineLen: 12,
+      rules: [
+        '- 문체: 경쾌한 맛집 기록. 메뉴 이름과 맛의 인상을 먼저 쓰고, 웨이팅·주차·주문 팁은 짧게 붙인다.',
+        '- 가격은 본문에 적힌 것만 쓰고, 없으면 숫자 대신 양·구성으로 표현한다.',
+        '- 자막은 메뉴 → 맛 → 꿀팁 순서로 한 컷에 하나씩만 담는다.'
+      ]
+    },
+    review: {
+      name: '후킹 리뷰', emoji: '🔥',
+      dur: 2.0, motions: ['zoom-in', 'pan'],
+      subPos: 'bottom', subSize: 1.16, titleScale: 1.12, firstTitle: true,
+      short: '2.0초 · 강한 첫 컷 · 큰 타이틀',
+      mood: '체험단·내돈내산 리뷰. 첫 컷부터 시선을 끄는 후킹 2.0초 컷, 크게 강조한 첫 타이틀, 장단점·핵심 요약',
+      hookLen: 16, lineLen: 12,
+      rules: [
+        '- 문체: 리뷰. 첫 컷은 "이거 모르면 손해"처럼 시선을 잡는 한 줄이되, 사실과 다른 과장·낚시는 쓰지 않는다.',
+        '- 이어지는 컷은 장점 → 아쉬운 점 → 총평 순으로, 직접 확인한 내용만 짧게 쓴다.',
+        '- 협찬·제공 여부를 본문에서 알 수 있으면 캡션 첫 줄에 밝힌다.'
+      ]
+    },
+    expo: {
+      name: '박람회·전시', emoji: '🎪',
+      dur: 1.8, motions: ['zoom-in', 'fixed'],
+      subPos: 'bottom', subSize: 1, titleScale: 1, firstTitle: false,
+      short: '1.8초 톡톡 · 하단 자막 · 꿀팁',
+      mood: '정보·꿀팁형. 1.8초 톡톡 템포, 하단 자막, 입장료·부스·사전등록 꿀팁 요약',
+      hookLen: 18, lineLen: 14,
+      rules: [
+        '- 문체: 정보형. 입장료·운영시간·위치·부스 번호·사전등록 방법처럼 바로 쓸 수 있는 것만 짧게 쓴다.',
+        '- 본문에 없는 정보는 지어내지 않는다. 확인이 필요하면 자막에 쓰지 말고 캡션에 "확인 필요"로 남긴다.',
+        '- 자막은 한 컷에 팁 하나. 숫자와 고유명사를 먼저 쓴다.'
+      ]
+    }
+  };
+
+  function themeOf() { return THEMES[state.themePreset] || null; }
+
+  /* 테마가 있으면 새로 담는 컷도 같은 템포로 들어옵니다. */
+  function themeCutStyle(idx) {
+    var th = themeOf();
+    if (!th) return { dur: 2.5, motion: 'zoom-in' };
+    return { dur: th.dur, motion: th.motions[idx % th.motions.length] };
+  }
 
   function loadJSON(key) {
     try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; }
@@ -846,11 +943,18 @@
       if (o.size === 720 || o.size === 1080) state.opts.size = o.size;
       if (o.subSize === 0.88 || o.subSize === 1 || o.subSize === 1.16) state.opts.subSize = o.subSize;
       if (o.subPos === 'center' || o.subPos === 'bottom') state.opts.subPos = o.subPos;
+      if (typeof o.titleScale === 'number' && o.titleScale >= 0.8 && o.titleScale <= 1.4) state.opts.titleScale = o.titleScale;
+      if (typeof o.themePreset === 'string' && THEMES[o.themePreset]) state.themePreset = o.themePreset;
       if (typeof o.vol === 'number' && o.vol >= 0 && o.vol <= 1) state.opts.vol = o.vol;
     }
   }
 
-  function saveOpts() { saveJSON(OKEY, state.opts); }
+  function saveOpts() {
+    var o = {};
+    for (var k in state.opts) if (state.opts.hasOwnProperty(k)) o[k] = state.opts[k];
+    o.themePreset = state.themePreset;
+    saveJSON(OKEY, o);
+  }
 
   function cleanKey(v) {
     return String(v == null ? '' : v)
@@ -870,6 +974,7 @@
       'dropZone', 'fileInput', 'cutList', 'cutEmpty', 'cutCount', 'totalDur', 'clearCuts',
       'topic', 'sendPhotos', 'aiBtn', 'aiHint', 'caption', 'captionBox', 'copyCaption', 'copyTags',
       'fitSeg', 'size', 'subSize', 'posSeg', 'bgmInput', 'bgmPlay', 'bgmClear', 'bgmName', 'vol', 'volVal',
+      'themeGrid', 'themeNote', 'themeOff',
       'stage', 'playBtn', 'resetBtn', 'timeline', 'timeNow', 'timeTotal', 'curCut', 'sizeBadge',
       'recBtn', 'recBar', 'recFill', 'recStat', 'savedBox', 'savedText', 'shareBtn', 'redownload', 'toast'
     ].forEach(function (id) { els[id] = $(id); });
@@ -1015,6 +1120,84 @@
     setSeg('fit', state.opts.fit);
     setSeg('pos', state.opts.subPos);
     resizeCanvas();
+    paintTheme();
+  }
+
+  /* ---------- 테마 프리셋 ---------- */
+  function paintTheme() {
+    if (!els.themeGrid) return;
+    var btns = els.themeGrid.querySelectorAll('.themebtn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-theme') === state.themePreset ? 'true' : 'false');
+    }
+    var th = themeOf();
+    if (els.themeOff) els.themeOff.classList.toggle('hidden', !th);
+    if (els.themeNote) {
+      els.themeNote.innerHTML = th
+        ? '지금 테마: <b>' + th.emoji + ' ' + th.name + '</b> · 컷 ' + fmt1(th.dur) + '초 · ' +
+          (th.subPos === 'center' ? '중앙' : '하단') + ' 자막 · AI 자막도 이 테마 말투로 씁니다'
+        : '테마를 고르면 지금 담긴 컷에 한 번에 적용되고, 이후 담는 컷도 같은 템포로 들어옵니다.';
+    }
+  }
+
+  function buildThemeButtons() {
+    if (!els.themeGrid) return;
+    var html = '';
+    for (var k in THEMES) {
+      if (!THEMES.hasOwnProperty(k)) continue;
+      var t = THEMES[k];
+      html += '<button class="themebtn" type="button" data-theme="' + k + '" aria-pressed="false">' +
+        '<span class="ti">' + t.emoji + '</span>' +
+        '<span class="tb"><span class="tn">' + esc(t.name) + '</span>' +
+        '<span class="td">' + esc(t.short) + '</span></span>' +
+        '</button>';
+    }
+    els.themeGrid.innerHTML = html;
+  }
+
+  function applyTheme(key) {
+    var th = THEMES[key];
+    if (!th) return;
+    if (state.rec) { toast('영상 저장 중에는 테마를 바꿀 수 없습니다'); return; }
+    if (state.playing) pause();
+
+    state.themePreset = key;
+    state.opts.subPos = th.subPos;
+    state.opts.subSize = th.subSize;
+    state.opts.titleScale = th.titleScale;
+    saveOpts();
+
+    if (state.cuts.length) {
+      for (var i = 0; i < state.cuts.length; i++) {
+        state.cuts[i].dur = th.dur;
+        state.cuts[i].motion = th.motions[i % th.motions.length];
+        if (i === 0 && th.firstTitle) state.cuts[i].title = true;
+      }
+      renderCuts();
+      var total = totalDuration();
+      state.pos = clamp(state.pos, 0, Math.max(0, total - 0.001));
+      drawFrame(state.pos);
+    }
+    paintOpts();
+    toast(th.name + ' 프리셋을 적용했습니다 (' + fmt1(th.dur) + '초 · ' + (th.subPos === 'center' ? '중앙' : '하단') + ' 자막)');
+  }
+
+  function clearTheme_() {
+    if (state.rec) return;
+    state.themePreset = '';
+    saveOpts();
+    paintTheme();
+    toast('테마를 껐습니다. 지금 컷 설정은 그대로 둡니다');
+  }
+
+  function bindTheme() {
+    buildThemeButtons();
+    els.themeGrid.addEventListener('click', function (e) {
+      var b = e.target.closest('.themebtn');
+      if (!b) return;
+      applyTheme(b.getAttribute('data-theme'));
+    });
+    if (els.themeOff) els.themeOff.addEventListener('click', clearTheme_);
   }
 
   function resizeCanvas() {
@@ -1104,6 +1287,7 @@
       var img = new Image();
       img.onload = function () {
         var first = state.cuts.length === 0;
+        var st = themeCutStyle(state.cuts.length);
         state.cuts.push({
           id: state.nextId++,
           name: file.name || 'photo',
@@ -1111,8 +1295,8 @@
           img: img,
           w: img.naturalWidth || img.width || 1080,
           h: img.naturalHeight || img.height || 1350,
-          dur: 2.5,
-          motion: 'zoom-in',
+          dur: st.dur,
+          motion: st.motion,
           text: '',
           title: first,
           bg: null
@@ -1176,7 +1360,7 @@
           '</label>' +
           '<div class="cutrow">' +
             '<label class="fld"><span class="flab"><span>표시 시간</span><b class="durval">' + fmt1(c.dur) + '초</b></span>' +
-              '<input type="range" min="1.5" max="6" step="0.5" value="' + c.dur + '" data-act="dur" aria-label="표시 시간"></label>' +
+              '<input type="range" min="1.5" max="6" step="0.1" value="' + c.dur + '" data-act="dur" aria-label="표시 시간"></label>' +
             '<label class="fld"><span class="flab"><span>모션</span></span>' +
               '<select data-act="motion" aria-label="모션">' + motionOptions(c.motion) + '</select></label>' +
           '</div>' +
@@ -1477,7 +1661,7 @@
     var text = String(cut.text || '').trim();
     if (!text) return;
     var isTitle = !!cut.title;
-    var fs = isTitle ? W * 0.072 : W * 0.047 * state.opts.subSize;
+    var fs = isTitle ? W * 0.072 * (state.opts.titleScale || 1) : W * 0.047 * state.opts.subSize;
     var lh = isTitle ? 1.26 : 1.34;
     var maxW = W * (isTitle ? 0.84 : 0.82);
 
@@ -2188,6 +2372,7 @@
         if (!got) { failed++; return; }
         if (got.tainted) tainted++;
         var first = state.cuts.length === 0;
+        var st = themeCutStyle(state.cuts.length);
         state.cuts.push({
           id: state.nextId++,
           name: '블로그 사진 ' + (state.cuts.length + 1),
@@ -2196,8 +2381,8 @@
           img: got.img,
           w: got.img.naturalWidth || 1080,
           h: got.img.naturalHeight || 1350,
-          dur: 2.5,
-          motion: 'zoom-in',
+          dur: st.dur,
+          motion: st.motion,
           text: '',
           hint: e.near || '',
           title: first,
@@ -2482,8 +2667,10 @@
   function buildAIPrompt(topic, n) {
     var lines = [];
     var bc = state.blogContext;
+    var th = themeOf();
     lines.push('주제/장소: ' + (topic || (bc && bc.title) || '(사진만 보고 추정)'));
     if (bc && bc.title) lines.push('블로그 글 제목: ' + bc.title);
+    if (th) lines.push('테마: ' + th.emoji + ' ' + th.name + ' — ' + th.mood);
     lines.push('컷 수: ' + n + '개');
     if (n) {
       lines.push('컷 순서와 사진 비율:');
@@ -2501,8 +2688,11 @@
     lines.push('');
     lines.push('규칙:');
     lines.push('- 블로그 본문에 나온 실제 표현·메뉴·장소를 우선 활용하고, 본문에 없는 가격·영업시간·주소는 지어내지 않는다.');
-    lines.push('- hook: 첫 컷에 크게 들어갈 후킹 타이틀. 최대 두 줄, 줄바꿈은 \\n 으로. 20자 안팎. 낚시성 과장 금지.');
-    lines.push('- cuts: 첫 컷을 제외한 2번째~마지막 컷의 자막. 컷마다 한 줄, 14자 안팎. 사진 내용을 구체적으로.');
+    if (th) {
+      for (var t = 0; t < th.rules.length; t++) lines.push(th.rules[t]);
+    }
+    lines.push('- hook: 첫 컷에 크게 들어갈 후킹 타이틀. 최대 두 줄, 줄바꿈은 \\n 으로. ' + (th ? th.hookLen : 20) + '자 안팎. 낚시성 과장 금지.');
+    lines.push('- cuts: 첫 컷을 제외한 2번째~마지막 컷의 자막. 컷마다 한 줄, ' + (th ? th.lineLen : 14) + '자 안팎. 사진 내용을 구체적으로.');
     lines.push('- caption: 인스타 캡션 3~5줄. 담백하게. 마지막에 해시태그 8~12개.');
     lines.push('- hashtags: 해시태그 배열(# 포함).');
     lines.push('');
@@ -2748,6 +2938,7 @@
 
     bindSettings();
     bindOpts();
+    bindTheme();
     bindCuts();
     bindPlayback();
     bindTimeline();
