@@ -171,6 +171,7 @@
   .cutbody{min-width:0}
   .cuttop{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px}
   .cutmeta{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cutmeta.vid{white-space:normal;line-height:1.4}
   .cuttools{display:flex;gap:4px;flex:0 0 auto}
   .mini{border:1px solid var(--line);background:#FFFEFB;color:var(--ink-2);border-radius:7px;width:26px;height:26px;font-size:11px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0}
   .mini:hover{border-color:var(--accent);color:var(--accent)}
@@ -1543,7 +1544,7 @@
         '</div>' +
         '<div class="cutbody">' +
           '<div class="cuttop">' +
-            '<span class="cutmeta">' + (isVid ? '🎬 영상 · ' + fmt1(c.dur) + '초 · ' : '') + c.w + '×' + c.h + ' · ' + ratio + '</span>' +
+            '<span class="cutmeta' + (isVid ? ' vid' : '') + '">' + (isVid ? '🎬 영상 · ' + fmt1(c.dur) + '초 · ' : '') + c.w + '×' + c.h + ' · ' + ratio + '</span>' +
             '<div class="cuttools">' +
               '<button class="mini wide" type="button" data-act="title" aria-pressed="' + (c.title ? 'true' : 'false') + '" title="큰 타이틀로 표시">타이틀</button>' +
               '<button class="mini" type="button" data-act="up" title="위로"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
