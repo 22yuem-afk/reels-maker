@@ -164,6 +164,10 @@
     font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;font-variant-numeric:tabular-nums
   }
   .cutthumb .ttlmark{position:absolute;right:4px;bottom:4px;font-size:9.5px;font-weight:700;letter-spacing:.04em;background:var(--accent);color:#FFF9EF;border-radius:5px;padding:1px 5px}
+  .cutthumb .vbadge{position:absolute;left:4px;bottom:4px;font-size:9.5px;font-weight:700;letter-spacing:.02em;background:rgba(20,17,16,.78);color:#FFF9EF;border-radius:5px;padding:1px 5px;font-variant-numeric:tabular-nums}
+  .cutthumb .vph{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:22px;background:#2A2420;color:#8C8378}
+  .vidsink{position:fixed;left:-9999px;top:0;width:2px;height:2px;overflow:hidden;opacity:0;pointer-events:none}
+  .vidsink video{width:2px;height:2px}
   .cutbody{min-width:0}
   .cuttop{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px}
   .cutmeta{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -432,20 +436,20 @@
       </section>
 
       <section class="card">
-        <h2>사진 담기 · 컷 편집</h2>
-        <p class="cap">블로그에서 가져온 사진이 여기 <b>컷</b>으로 들어옵니다. 사진만 직접 고를 때는 아래 <b>사진 선택</b>을 쓰세요.</p>
+        <h2>사진·영상 담기 · 컷 편집</h2>
+        <p class="cap">블로그에서 가져온 사진이 여기 <b>컷</b>으로 들어옵니다. 사진이나 짧은 영상을 직접 고를 때는 아래 <b>사진·영상 선택</b>을 쓰세요.</p>
         <label class="drop" id="dropZone">
-          <input type="file" id="fileInput" accept="image/*" multiple hidden>
+          <input type="file" id="fileInput" accept="image/*,video/*,.mp4,.mov,.m4v,.webm" multiple hidden>
           <span class="dropicon">🖼️</span>
-          <span class="droptitle">사진 선택 · 끌어다 놓기</span>
-          <span class="dropsub">JPG · PNG · HEIC · 여러 장 가능</span>
+          <span class="droptitle">사진·영상 선택 · 끌어다 놓기</span>
+          <span class="dropsub">JPG · PNG · HEIC · MP4 · MOV</span>
         </label>
         <div class="cuthead">
           <span class="chiph">컷 <b id="cutCount">0</b>개 · 총 <b id="totalDur">0.0</b>초</span>
           <button class="btn small hidden" id="clearCuts" type="button">전체 비우기</button>
         </div>
         <div id="cutList" class="cutlist"></div>
-        <p class="empty" id="cutEmpty">아직 사진이 없습니다. 위에서 사진을 담아 주세요.</p>
+        <p class="empty" id="cutEmpty">아직 사진이나 영상이 없습니다. 위에서 담아 주세요.</p>
       </section>
 
       <section class="card">
@@ -568,11 +572,12 @@
 
   <footer>
     <span>사진 → 릴스 메이커 · 이예인 전용 · 22yuem-afk.github.io/reels-maker</span>
-    <span>사진은 브라우저 밖으로 나가지 않습니다. AI 자막을 쓸 때만 선택한 사진이 API로 전송됩니다.</span>
+    <span>사진·영상은 브라우저 밖으로 나가지 않습니다. AI 자막을 쓸 때만 선택한 사진이 API로 전송됩니다.</span>
   </footer>
 </div>
 
 <div id="toast"></div>
+<div id="videoSink" class="vidsink" aria-hidden="true"></div>
 
 <script>
 /* =========================================================
@@ -831,7 +836,7 @@
     themePreset: '',
     playing: false, rafId: 0, pos: 0,
     rec: false, recRaf: 0, recStart: 0, recTotal: 0,
-    vtrack: null, recBadMimes: {}, recRetry: 0, recError: '',
+    vtrack: null, recBadMimes: {}, recRetry: 0, recError: '', videoNowId: 0,
     busyAI: false,
     busyBlog: false,
     blogContext: null,
@@ -971,7 +976,7 @@
       'settingsToggle', 'settingsPanel', 'keyDot', 'keyLabel', 'provider', 'model', 'apikey', 'showKey', 'saveKey', 'keyStatus',
       'blogUrl', 'blogBtn', 'blogMore', 'blogStatus', 'blogInfo', 'blogTitle', 'blogMeta', 'blogText',
       'blogAIBtn', 'blogSplitBtn', 'blogPromptBtn', 'aiPaste', 'aiPasteBtn', 'aiPasteBox',
-      'dropZone', 'fileInput', 'cutList', 'cutEmpty', 'cutCount', 'totalDur', 'clearCuts',
+      'dropZone', 'fileInput', 'cutList', 'cutEmpty', 'cutCount', 'totalDur', 'clearCuts', 'videoSink',
       'topic', 'sendPhotos', 'aiBtn', 'aiHint', 'caption', 'captionBox', 'copyCaption', 'copyTags',
       'fitSeg', 'size', 'subSize', 'posSeg', 'bgmInput', 'bgmPlay', 'bgmClear', 'bgmName', 'vol', 'volVal',
       'themeGrid', 'themeNote', 'themeOff',
@@ -1258,27 +1263,41 @@
   }
 
   /* =========================================================
-     사진 담기
+     사진·영상 담기
      ========================================================= */
+  var VIDEO_EXT = /\.(mp4|m4v|mov|qt|webm|ogv)$/i;
+
+  function fileKind(f) {
+    if (!f) return '';
+    var t = String(f.type || '').toLowerCase();
+    if (/^video\//.test(t)) return 'video';
+    if (/^image\//.test(t)) return 'image';
+    var n = String(f.name || '');
+    if (VIDEO_EXT.test(n)) return 'video';
+    if (/\.(jpe?g|png|webp|gif|hei[cf])$/i.test(n)) return 'image';
+    return '';
+  }
+
   function addFiles(fileList) {
     var files = Array.prototype.slice.call(fileList || []).filter(function (f) {
-      return /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|hei[cf])$/i.test(f.name || '');
+      return !!fileKind(f);
     });
-    if (!files.length) { toast('사진 파일이 아닙니다'); return; }
+    if (!files.length) { toast('사진이나 영상 파일이 아닙니다'); return; }
     var before = state.cuts.length;
     var failed = 0;
     var chain = Promise.resolve();
     files.forEach(function (f) {
       chain = chain.then(function () {
-        return loadOne(f).then(function (ok) { if (!ok) failed++; });
+        var kind = fileKind(f);
+        return (kind === 'video' ? loadVideo(f) : loadOne(f)).then(function (ok) { if (!ok) failed++; });
       });
     });
     chain.then(function () {
       renderCuts();
       drawFrame(state.pos);
       var added = state.cuts.length - before;
-      if (added > 0) toast(added + '컷을 담았습니다' + (failed ? ' (' + failed + '장은 열 수 없음)' : ''));
-      else if (failed) toast('사진을 열지 못했습니다. HEIC는 아이폰 사진 앱에서 JPG로 변환해 주세요.');
+      if (added > 0) toast(added + '컷을 담았습니다' + (failed ? ' (' + failed + '개는 열 수 없음)' : ''));
+      else if (failed) toast('파일을 열지 못했습니다. HEIC는 JPG로, MOV는 MP4로 변환해 주세요.');
     });
   }
 
@@ -1292,11 +1311,16 @@
         var st = themeCutStyle(state.cuts.length);
         state.cuts.push({
           id: state.nextId++,
+          type: 'image',
           name: file.name || 'photo',
           url: url,
           img: img,
+          video: null,
+          thumb: '',
+          thumbImg: null,
           w: img.naturalWidth || img.width || 1080,
           h: img.naturalHeight || img.height || 1350,
+          vdur: 0,
           dur: st.dur,
           motion: st.motion,
           text: '',
@@ -1308,6 +1332,173 @@
       img.onerror = function () { try { URL.revokeObjectURL(url); } catch (e) {} resolve(false); };
       img.src = url;
     });
+  }
+
+  /* 동영상 한 개를 컷으로 담는다.
+     - <video muted playsInline> 로 메타데이터(duration·해상도)를 읽고
+     - 0.1초 지점 프레임을 작은 canvas 로 캡처해 컷 썸네일로 쓴다
+     - 기본 표시 시간 = 원본 길이와 5초 중 짧은 쪽(1.5~15초) */
+  function loadVideo(file) {
+    return new Promise(function (resolve) {
+      var url;
+      try { url = URL.createObjectURL(file); } catch (e) { resolve(false); return; }
+      var v = document.createElement('video');
+      v.muted = true;
+      v.defaultMuted = true;
+      v.volume = 0;
+      v.playsInline = true;
+      v.setAttribute('playsinline', '');
+      v.setAttribute('webkit-playsinline', '');
+      v.setAttribute('muted', '');
+      v.preload = 'auto';
+      v.src = url;
+
+      var done = false;
+      var fail = function () {
+        if (done) return;
+        done = true;
+        try { v.pause(); } catch (e0) {}
+        try { v.removeAttribute('src'); v.load(); } catch (e1) {}
+        if (v.parentNode) v.parentNode.removeChild(v);
+        try { URL.revokeObjectURL(url); } catch (e2) {}
+        resolve(false);
+      };
+      var start = function () {
+        if (done) return;
+        var w = v.videoWidth || 1080, h = v.videoHeight || 1920;
+        var vd = 0;
+        try { vd = v.duration; } catch (e) {}
+        if (!isFinite(vd) || vd <= 0) vd = 0;
+        var first = state.cuts.length === 0;
+        var base = vd > 0 ? Math.min(vd, 5.0) : 2.5;
+        var cut = {
+          id: state.nextId++,
+          type: 'video',
+          name: file.name || 'video',
+          url: url,
+          img: null,
+          video: v,
+          thumb: '',
+          thumbImg: null,
+          w: w,
+          h: h,
+          vdur: vd,
+          dur: clamp(Math.round(base * 10) / 10, 1.5, 15),
+          motion: 'fixed',
+          text: '',
+          title: first,
+          bg: null
+        };
+        done = true;
+        state.cuts.push(cut);
+        captureVideoThumb(cut).then(function () {
+          if (state.cuts.indexOf(cut) < 0) return;
+          renderCuts();
+          if (!state.playing && !state.rec) drawFrame(state.pos);
+          probeDuration(cut);
+        });
+        /* 미리보기에서 멈춰 있을 때 위치를 옮기면 그 프레임을 다시 그린다 */
+        v.addEventListener('seeked', function () {
+          if (!state.playing && !state.rec) drawFrame(state.pos);
+        });
+        resolve(true);
+      };
+
+      v.addEventListener('loadeddata', start, { once: true });
+      v.addEventListener('loadedmetadata', function () {
+        if (v.readyState >= 2) { start(); return; }
+        setTimeout(function () { if (!done && v.readyState >= 2) start(); }, 500);
+      });
+      v.addEventListener('error', fail, { once: true });
+      /* 메타데이터만 오고 첫 프레임이 안 오는 경우(코덱 미지원 등) 8초 뒤 포기 */
+      setTimeout(function () {
+        if (done) return;
+        if (v.readyState >= 1) start(); else fail();
+      }, 8000);
+
+      (els.videoSink || document.body).appendChild(v);
+      try { v.load(); } catch (e) {}
+    });
+  }
+
+  function captureVideoThumb(cut) {
+    return new Promise(function (resolve) {
+      var v = cut.video;
+      if (!v) { resolve(false); return; }
+      var settle = function (attempt) {
+        var data = '';
+        try {
+          var vw = v.videoWidth || cut.w || 1, vh = v.videoHeight || cut.h || 1;
+          var cw = 160, ch = Math.max(1, Math.round(160 * vh / vw));
+          var cv = document.createElement('canvas');
+          cv.width = cw; cv.height = ch;
+          cv.getContext('2d').drawImage(v, 0, 0, cw, ch);
+          data = cv.toDataURL('image/jpeg', 0.72);
+        } catch (e) { data = ''; }
+        if (!data && attempt < 2) { setTimeout(function () { settle(attempt + 1); }, 300); return; }
+        if (data) {
+          cut.thumb = data;
+          var im = new Image();
+          im.src = data;
+          cut.thumbImg = im;
+        }
+        try { v.currentTime = 0; } catch (e2) {}
+        resolve(!!data);
+      };
+      var fired = false;
+      var onSeek = function () {
+        if (fired) return;
+        fired = true;
+        v.removeEventListener('seeked', onSeek);
+        setTimeout(function () { settle(0); }, 50);
+      };
+      v.addEventListener('seeked', onSeek);
+      var target = Math.min(0.1, Math.max(0, (cut.vdur || 0) * 0.15));
+      try { v.currentTime = target; } catch (e) {}
+      setTimeout(function () { if (!fired) { fired = true; v.removeEventListener('seeked', onSeek); settle(0); } }, 1200);
+    });
+  }
+
+  /* MediaRecorder 로 만든 WebM 처럼 헤더에 길이가 없으면 duration 이
+     Infinity 로 나온다. 그때는 먼 위치로 seek 해 실제 길이를 받아낸다. */
+  function probeDuration(cut) {
+    var v = cut.video;
+    if (!v || cut.vdur > 0) return;
+    var done = false;
+    var finish = function () {
+      if (done) return;
+      done = true;
+      v.removeEventListener('durationchange', onDur);
+      var d = 0;
+      try { d = v.duration; } catch (e) {}
+      if (!isFinite(d) || d <= 0) { try { v.currentTime = 0; } catch (e2) {} return; }
+      cut.vdur = d;
+      if (!cut.durTouched) cut.dur = clamp(Math.round(Math.min(d, 5.0) * 10) / 10, 1.5, 15);
+      if (state.cuts.indexOf(cut) < 0) return;
+      renderCuts();
+      if (!state.playing && !state.rec) drawFrame(state.pos);
+      try { v.currentTime = 0; } catch (e3) {}
+    };
+    var onDur = function () {
+      var d = 0;
+      try { d = v.duration; } catch (e) {}
+      if (isFinite(d) && d > 0) finish();
+    };
+    v.addEventListener('durationchange', onDur);
+    try { v.currentTime = 1e7; } catch (e4) {}
+    setTimeout(finish, 1500);
+  }
+
+  function releaseCut(c) {
+    if (!c) return;
+    if (c.video) {
+      try { c.video.pause(); } catch (e) {}
+      try { c.video.removeAttribute('src'); c.video.load(); } catch (e2) {}
+      if (c.video.parentNode) c.video.parentNode.removeChild(c.video);
+      c.video = null;
+    }
+    c.thumbImg = null;
+    try { URL.revokeObjectURL(c.url); } catch (e3) {}
   }
 
   function indexOfId(id) {
@@ -1340,16 +1531,19 @@
     }
     var html = '';
     state.cuts.forEach(function (c, i) {
+      var isVid = c.type === 'video';
       var ratio = c.h > c.w * 1.05 ? '세로' : (c.w > c.h * 1.05 ? '가로' : '정사각');
+      var thumbSrc = isVid ? (c.thumb || '') : c.url;
       html += '<article class="cut' + (c.title ? ' lead' : '') + '" data-id="' + c.id + '">' +
         '<div class="cutthumb">' +
-          '<img src="' + c.url + '" alt="">' +
+          (thumbSrc ? '<img src="' + thumbSrc + '" alt="">' : '<div class="vph">🎬</div>') +
           '<span class="cutno">' + (i + 1) + '</span>' +
+          (isVid ? '<span class="vbadge">영상 ' + fmt1(c.dur) + '초</span>' : '') +
           (c.title ? '<span class="ttlmark">TITLE</span>' : '') +
         '</div>' +
         '<div class="cutbody">' +
           '<div class="cuttop">' +
-            '<span class="cutmeta">' + c.w + '×' + c.h + ' · ' + ratio + '</span>' +
+            '<span class="cutmeta">' + (isVid ? '🎬 영상 · ' + fmt1(c.dur) + '초 · ' : '') + c.w + '×' + c.h + ' · ' + ratio + '</span>' +
             '<div class="cuttools">' +
               '<button class="mini wide" type="button" data-act="title" aria-pressed="' + (c.title ? 'true' : 'false') + '" title="큰 타이틀로 표시">타이틀</button>' +
               '<button class="mini" type="button" data-act="up" title="위로"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
@@ -1362,10 +1556,11 @@
           '</label>' +
           '<div class="cutrow">' +
             '<label class="fld"><span class="flab"><span>표시 시간</span><b class="durval">' + fmt1(c.dur) + '초</b></span>' +
-              '<input type="range" min="1.5" max="6" step="0.1" value="' + c.dur + '" data-act="dur" aria-label="표시 시간"></label>' +
+              '<input type="range" min="1.5" max="' + (isVid ? 15 : 6) + '" step="0.1" value="' + c.dur + '" data-act="dur" aria-label="표시 시간"></label>' +
             '<label class="fld"><span class="flab"><span>모션</span></span>' +
               '<select data-act="motion" aria-label="모션">' + motionOptions(c.motion) + '</select></label>' +
           '</div>' +
+          (isVid && c.vdur ? '<p class="rowhint">원본 ' + fmt1(c.vdur) + '초 · 표시 시간이 원본보다 길면 반복 재생됩니다</p>' : '') +
         '</div>' +
       '</article>';
     });
@@ -1443,6 +1638,7 @@
         if (!state.playing && !state.rec) drawFrame(state.pos);
       } else if (act === 'dur') {
         cut.dur = parseFloat(t.value) || 2.5;
+        cut.durTouched = true;
         var b = card.querySelector('.durval');
         if (b) b.textContent = fmt1(cut.dur) + '초';
         updateTotals();
@@ -1464,10 +1660,11 @@
 
     els.clearCuts.addEventListener('click', function () {
       if (!state.cuts.length) return;
-      if (!confirm('사진 ' + state.cuts.length + '장을 모두 뺄까요? 자막도 함께 사라집니다.')) return;
+      if (!confirm('컷 ' + state.cuts.length + '개를 모두 뺄까요? 자막도 함께 사라집니다.')) return;
       pause();
-      state.cuts.forEach(function (c) { try { URL.revokeObjectURL(c.url); } catch (e) {} });
+      state.cuts.forEach(releaseCut);
       state.cuts = [];
+      state.videoNowId = 0;
       state.pos = 0;
       renderCuts();
       drawIdle();
@@ -1479,6 +1676,7 @@
     pause();
     var c = state.cuts.splice(from, 1)[0];
     state.cuts.splice(to, 0, c);
+    state.videoNowId = 0;
     renderCuts();
     drawFrame(0);
     state.pos = 0;
@@ -1487,7 +1685,8 @@
   function removeCut(idx) {
     pause();
     var c = state.cuts[idx];
-    try { URL.revokeObjectURL(c.url); } catch (e) {}
+    releaseCut(c);
+    state.videoNowId = 0;
     state.cuts.splice(idx, 1);
     if (c.title && state.cuts.length) state.cuts[0].title = true;
     renderCuts();
@@ -1514,7 +1713,7 @@
     c.textBaseline = 'middle';
     c.fillStyle = 'rgba(255,249,239,.30)';
     c.font = '600 ' + Math.round(W * 0.040) + 'px ' + FONT;
-    c.fillText('사진을 담으면', W / 2, H * 0.46);
+    c.fillText('사진·영상을 담으면', W / 2, H * 0.46);
     c.fillText('여기에 미리보기가 나옵니다', W / 2, H * 0.46 + W * 0.066);
     c.fillStyle = 'rgba(255,249,239,.16)';
     c.font = '500 ' + Math.round(W * 0.028) + 'px ' + FONT;
@@ -1549,9 +1748,11 @@
     var loc = locate(tt);
     var cut = state.cuts[loc.i];
 
+    if (cut && cut.type === 'video') syncVideo(cut, loc.p, state.playing || state.rec);
+    else pauseAllVideos(null);
+
     drawCutImage(c, cut, loc.p, loc.i, W, H);
     drawCaption(c, cut, loc.p, loc.i, W, H);
-
     markTimeline(loc.i, loc.p);
     els.timeNow.textContent = fmt1(clamp(t, 0, total));
     els.curCut.textContent = '컷 ' + (loc.i + 1) + ' / ' + state.cuts.length;
@@ -1594,13 +1795,85 @@
     try { g.filter = 'blur(9px)'; } catch (e) {}
     var s = Math.max((108 + 28) / cut.w, (192 + 28) / cut.h);
     var dw = cut.w * s, dh = cut.h * s;
-    try { g.drawImage(cut.img, (108 - dw) / 2, (192 - dh) / 2, dw, dh); } catch (e) {}
+    try { g.drawImage(mediaOf(cut), (108 - dw) / 2, (192 - dh) / 2, dw, dh); } catch (e2) {}
     cut.bg = { key: key, canvas: bc };
     return bc;
   }
 
+  /* 지금 그릴 수 있는 원본 요소(사진 img 또는 동영상 video) */
+  function mediaOf(cut) {
+    if (!cut) return null;
+    if (cut.type === 'video') {
+      var v = cut.video;
+      if (v && v.readyState >= 2 && v.videoWidth) return v;
+      if (cut.thumbImg && cut.thumbImg.complete && cut.thumbImg.naturalWidth) return cut.thumbImg;
+      return v && v.readyState >= 2 ? v : null;
+    }
+    return cut.img;
+  }
+
+  /* ---------- 영상 컷 재생 동기화 ---------- */
+  function videoLength(cut) {
+    var d = cut.vdur || 0;
+    if (!d && cut.video) { try { d = cut.video.duration; } catch (e) { d = 0; } }
+    if (!isFinite(d) || d < 0) d = 0;
+    return d;
+  }
+
+  function pauseAllVideos(except) {
+    for (var i = 0; i < state.cuts.length; i++) {
+      var c = state.cuts[i];
+      if (!c.video || c === except) continue;
+      try { if (!c.video.paused) c.video.pause(); } catch (e) {}
+    }
+  }
+
+  function syncVideo(cut, p, live) {
+    var v = cut.video;
+    if (!v) return;
+    var vd = videoLength(cut);
+    var loop = vd > 0 && cut.dur > vd + 0.05;
+    if (v.loop !== loop) v.loop = loop;
+    pauseAllVideos(cut);
+
+    var local = p * cut.dur;
+    var target = vd > 0 ? (loop ? (local % vd) : Math.min(local, Math.max(0, vd - 0.04))) : 0;
+
+    if (live) {
+      if (state.videoNowId !== cut.id) {
+        state.videoNowId = cut.id;
+        try { v.currentTime = 0; } catch (e) {}
+        if (v.paused) {
+          var pr = v.play();
+          if (pr && pr.catch) pr.catch(function () {});
+        }
+        return;
+      }
+      if (v.paused) {
+        var pr2 = v.play();
+        if (pr2 && pr2.catch) pr2.catch(function () {});
+        return;
+      }
+      var drift = v.currentTime - target;
+      if (loop && Math.abs(drift) > vd / 2) drift = 0;
+      if (Math.abs(drift) > 0.28) { try { v.currentTime = target; } catch (e2) {} }
+    } else {
+      state.videoNowId = 0;
+      if (!v.paused) { try { v.pause(); } catch (e3) {} }
+      if (Math.abs((v.currentTime || 0) - target) > 0.06) {
+        try { v.currentTime = target; } catch (e4) {}
+      }
+    }
+  }
+
   function drawCutImage(c, cut, p, idx, W, H) {
+    var src = mediaOf(cut);
     var m = motionOf(cut, p, idx, W);
+    if (!src) {
+      c.fillStyle = '#1B1714';
+      c.fillRect(0, 0, W, H);
+      return;
+    }
     if (state.opts.fit === 'blur') {
       try { c.drawImage(getBg(cut), 0, 0, W, H); } catch (e) {}
       c.fillStyle = 'rgba(16,13,11,.36)';
@@ -1613,7 +1886,7 @@
       c.shadowColor = 'rgba(0,0,0,.5)';
       c.shadowBlur = W * 0.035;
       c.shadowOffsetY = W * 0.008;
-      try { c.drawImage(cut.img, r.x, r.y, r.w, r.h); } catch (e) {}
+      try { c.drawImage(src, r.x, r.y, r.w, r.h); } catch (e2) {}
       c.restore();
     } else {
       var r2 = coverRect(cut.w, cut.h, W, H);
@@ -1621,7 +1894,7 @@
       c.translate(W / 2 + m.dx, H / 2);
       c.scale(m.z, m.z);
       c.translate(-W / 2, -H / 2);
-      try { c.drawImage(cut.img, r2.x, r2.y, r2.w, r2.h); } catch (e) {}
+      try { c.drawImage(src, r2.x, r2.y, r2.w, r2.h); } catch (e3) {}
       c.restore();
     }
   }
@@ -1757,6 +2030,7 @@
       if (isNaN(idx)) return;
       pause();
       state.pos = startTimeOf(idx) + 0.001;
+      state.videoNowId = 0;
       drawFrame(state.pos);
     });
   }
@@ -1768,6 +2042,7 @@
     var total = totalDuration();
     if (state.pos >= total - 0.03) state.pos = 0;
     state.playing = true;
+    state.videoNowId = 0;
     state.playStart = performance.now() - state.pos * 1000;
     els.playBtn.textContent = '⏸ 정지';
     stopBgmPreview();
@@ -1794,6 +2069,8 @@
     if (state.rafId) cancelAnimationFrame(state.rafId);
     state.rafId = 0;
     els.playBtn.textContent = '▶︎ 미리보기';
+    state.videoNowId = 0;
+    pauseAllVideos(null);
   }
 
   function bindPlayback() {
@@ -1972,7 +2249,7 @@
 
   function startRecord() {
     if (state.rec) return;
-    if (!state.cuts.length) { toast('먼저 사진을 담아 주세요'); return; }
+    if (!state.cuts.length) { toast('먼저 사진이나 영상을 담아 주세요'); return; }
     if (!window.MediaRecorder || !els.stage.captureStream) {
       setRecStat('이 브라우저는 영상 녹화를 지원하지 않습니다. 아이폰 Safari(16.4 이상)나 최신 크롬에서 열어 주세요.', 'bad');
       return;
@@ -1982,6 +2259,23 @@
 
     var total = totalDuration();
     state.pos = 0;
+    state.videoNowId = 0;
+    /* 동영상 컷은 사용자 클릭(이 버튼) 안에서 한 번 재생해 두어야
+       이후 녹화 중 스크립트 재생이 iOS에서도 막히지 않습니다. */
+    for (var vi = 0; vi < state.cuts.length; vi++) {
+      var vv = state.cuts[vi].video;
+      if (!vv) continue;
+      try { vv.muted = true; vv.currentTime = 0; } catch (e) {}
+      try {
+        var pp = vv.play();
+        if (pp && pp.then) {
+          (function (el) {
+            pp.then(function () { try { el.pause(); } catch (e) {} }).catch(function () {});
+          })(vv);
+        }
+      } catch (e2) {}
+    }
+    setTimeout(function () { pauseAllVideos(null); drawFrame(0); }, 60);
     drawFrame(0);
 
     /* captureStream(30) 만 쓰면 일부 크롬에서 프레임이 한 장도 안 잡혀
@@ -2108,6 +2402,8 @@
     state.rec = false;
     if (state.recRaf) cancelAnimationFrame(state.recRaf);
     state.recRaf = 0;
+    pauseAllVideos(null);
+    state.videoNowId = 0;
     els.recBtn.disabled = false;
     els.recBtn.textContent = '🎬 영상 파일 저장';
     els.recBar.classList.remove('on');
